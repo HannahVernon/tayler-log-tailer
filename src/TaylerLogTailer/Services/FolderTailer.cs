@@ -6,17 +6,23 @@ namespace TaylerLogTailer.Services;
 
 /// <summary>
 /// Watches a folder for log files matching one or more glob patterns and tails
-/// them into a combined stream of <see cref="LogRow"/> values. New files are
-/// picked up automatically via <see cref="FileSystemWatcher"/> and a periodic
-/// poll that also acts as a fallback for missed change notifications.
+/// them into a combined stream of <see cref="LogRow"/> values. Discovery is
+/// driven by <see cref="FileSystemWatcher"/> events with a throttled full
+/// rescan as a fallback; directory enumeration and file reads happen outside
+/// the lock so a large or deep tree cannot block the poll loop. Recursive scans
+/// do not follow reparse points (junctions / symlinks), and the number of
+/// followed files is capped.
 /// </summary>
 public sealed class FolderTailer : IDisposable
 {
     private const int PollIntervalMs = 250;
+    private const int RescanIntervalMs = 2000;
+    private const int MaxFiles = 4096;
 
     private readonly Dictionary<string, FileTailer> _tailers =
         new(StringComparer.OrdinalIgnoreCase);
 
+    private readonly HashSet<string> _notified = new();
     private readonly object _gate = new();
     private readonly string _folder;
     private readonly bool _recursive;
@@ -26,7 +32,11 @@ public sealed class FolderTailer : IDisposable
     private FileSystemWatcher? _watcher;
     private Timer? _timer;
     private int _polling;
-    private bool _disposed;
+    private int _rescanRequested;
+    private long _lastRescanTick;
+    private bool _capNotified;
+    private volatile bool _paused;
+    private volatile bool _disposed;
 
     public FolderTailer(string folder, string globPattern, bool recursive, int initialLines)
     {
@@ -41,24 +51,33 @@ public sealed class FolderTailer : IDisposable
     /// </summary>
     public event Action<IReadOnlyList<LogRow>>? LinesArrived;
 
-    public bool Paused { get; set; }
+    /// <summary>
+    /// Raised (on a background thread) with a human-readable message when a
+    /// non-fatal condition occurs (access denied, watcher unavailable, file
+    /// limit reached).
+    /// </summary>
+    public event Action<string>? Notice;
+
+    public bool Paused
+    {
+        get => _paused;
+        set => _paused = value;
+    }
 
     public void Start()
     {
-        var initial = new List<LogRow>();
-        lock (_gate)
+        // Guard the initial discovery against a watcher event racing in.
+        Interlocked.Exchange(ref _polling, 1);
+        try
         {
-            foreach (string file in EnumerateFiles())
-            {
-                AddTailer(file, initial);
-            }
+            Reconcile();
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _polling, 0);
         }
 
-        if (initial.Count > 0)
-        {
-            LinesArrived?.Invoke(initial);
-        }
-
+        _lastRescanTick = Environment.TickCount64;
         SetupWatcher();
         _timer = new Timer(_ => Poll(), null, PollIntervalMs, PollIntervalMs);
     }
@@ -88,22 +107,29 @@ public sealed class FolderTailer : IDisposable
             };
 
             _watcher.Changed += (_, _) => Poll();
-            _watcher.Created += (_, _) => Poll();
-            _watcher.Renamed += (_, _) => Poll();
-            _watcher.Deleted += (_, _) => Poll();
+            _watcher.Created += (_, _) => RequestRescanAndPoll();
+            _watcher.Renamed += (_, _) => RequestRescanAndPoll();
+            _watcher.Deleted += (_, _) => RequestRescanAndPoll();
             _watcher.EnableRaisingEvents = true;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             // If the watcher cannot be created (for example on some network
             // shares) the periodic poll still keeps the view up to date.
             _watcher = null;
+            RaiseNotice($"File watcher unavailable; using periodic polling only ({ex.Message}).");
         }
+    }
+
+    private void RequestRescanAndPoll()
+    {
+        Interlocked.Exchange(ref _rescanRequested, 1);
+        Poll();
     }
 
     private void Poll()
     {
-        if (_disposed || Paused)
+        if (_disposed || _paused)
         {
             return;
         }
@@ -115,43 +141,20 @@ public sealed class FolderTailer : IDisposable
 
         try
         {
-            var batch = new List<LogRow>();
-            lock (_gate)
+            bool rescan = Interlocked.Exchange(ref _rescanRequested, 0) == 1
+                || Environment.TickCount64 - _lastRescanTick >= RescanIntervalMs;
+
+            if (rescan)
             {
-                var current = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (string file in EnumerateFiles())
-                {
-                    current.Add(file);
-                    if (!_tailers.ContainsKey(file))
-                    {
-                        AddTailer(file, batch);
-                    }
-                }
-
-                foreach (var pair in _tailers)
-                {
-                    foreach (string line in pair.Value.ReadNew())
-                    {
-                        batch.Add(new LogRow { FileName = pair.Value.FileName, Text = line });
-                    }
-                }
-
-                // Drop tailers whose files have disappeared.
-                var removed = _tailers.Keys.Where(k => !current.Contains(k)).ToList();
-                foreach (string key in removed)
-                {
-                    _tailers.Remove(key);
-                }
+                Reconcile();
+                _lastRescanTick = Environment.TickCount64;
             }
 
-            if (batch.Count > 0)
-            {
-                LinesArrived?.Invoke(batch);
-            }
+            DrainExisting();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Never let a transient IO error tear down the poll loop.
+            RaiseNotice($"Tailing error: {ex.Message}");
         }
         finally
         {
@@ -159,27 +162,118 @@ public sealed class FolderTailer : IDisposable
         }
     }
 
-    private void AddTailer(string file, List<LogRow> output)
+    /// <summary>
+    /// Discovers newly matching files (and drops files that disappeared),
+    /// performing enumeration and the initial read of each new file outside the
+    /// lock.
+    /// </summary>
+    private void Reconcile()
     {
-        var tailer = new FileTailer(file);
-        foreach (string line in tailer.Initialize(_initialLines))
+        var enumerated = new List<string>();
+        bool capHit = false;
+        foreach (string file in EnumerateFiles())
         {
-            output.Add(new LogRow { FileName = tailer.FileName, Text = line });
+            enumerated.Add(file);
+            if (enumerated.Count >= MaxFiles)
+            {
+                capHit = true;
+                break;
+            }
         }
 
-        _tailers[file] = tailer;
+        var enumeratedSet = new HashSet<string>(enumerated, StringComparer.OrdinalIgnoreCase);
+
+        List<string> toAdd;
+        lock (_gate)
+        {
+            toAdd = enumerated.Where(f => !_tailers.ContainsKey(f)).ToList();
+        }
+
+        var batch = new List<LogRow>();
+        var created = new List<KeyValuePair<string, FileTailer>>();
+        foreach (string file in toAdd)
+        {
+            var tailer = new FileTailer(file);
+            foreach (string line in tailer.Initialize(_initialLines))
+            {
+                batch.Add(new LogRow { FileName = tailer.FileName, Text = line });
+            }
+
+            if (tailer.LastError is not null)
+            {
+                NotifyError(file, tailer.LastError);
+            }
+
+            created.Add(new KeyValuePair<string, FileTailer>(file, tailer));
+        }
+
+        lock (_gate)
+        {
+            foreach (var pair in created)
+            {
+                if (_tailers.Count >= MaxFiles)
+                {
+                    capHit = true;
+                    break;
+                }
+
+                _tailers[pair.Key] = pair.Value;
+            }
+
+            foreach (string key in _tailers.Keys.Where(k => !enumeratedSet.Contains(k)).ToList())
+            {
+                _tailers.Remove(key);
+            }
+        }
+
+        if (batch.Count > 0)
+        {
+            RaiseLines(batch);
+        }
+
+        if (capHit && !_capNotified)
+        {
+            _capNotified = true;
+            RaiseNotice($"File limit ({MaxFiles}) reached; additional files are not being followed.");
+        }
     }
 
-    private IEnumerable<string> EnumerateFiles()
+    private void DrainExisting()
     {
-        SearchOption option = _recursive
-            ? SearchOption.AllDirectories
-            : SearchOption.TopDirectoryOnly;
+        List<FileTailer> snapshot;
+        lock (_gate)
+        {
+            snapshot = _tailers.Values.ToList();
+        }
 
-        IEnumerable<string> files;
+        var batch = new List<LogRow>();
+        foreach (FileTailer tailer in snapshot)
+        {
+            foreach (string line in tailer.ReadNew())
+            {
+                batch.Add(new LogRow { FileName = tailer.FileName, Text = line });
+            }
+
+            if (tailer.LastError is not null)
+            {
+                NotifyError(tailer.FilePath, tailer.LastError);
+            }
+        }
+
+        if (batch.Count > 0)
+        {
+            RaiseLines(batch);
+        }
+    }
+
+    private IEnumerable<string> EnumerateFiles() => EnumerateDirectory(_folder);
+
+    private IEnumerable<string> EnumerateDirectory(string directory)
+    {
+        string[] files;
         try
         {
-            files = Directory.EnumerateFiles(_folder, "*", option);
+            files = Directory.GetFiles(directory);
         }
         catch (Exception)
         {
@@ -188,11 +282,81 @@ public sealed class FolderTailer : IDisposable
 
         foreach (string file in files)
         {
-            if (_matcher.IsMatch(Path.GetFileName(file)))
+            if (IsMatch(Path.GetFileName(file)))
             {
                 yield return file;
             }
         }
+
+        if (!_recursive)
+        {
+            yield break;
+        }
+
+        string[] subdirectories;
+        try
+        {
+            subdirectories = Directory.GetDirectories(directory);
+        }
+        catch (Exception)
+        {
+            yield break;
+        }
+
+        foreach (string subdirectory in subdirectories)
+        {
+            bool isReparsePoint;
+            try
+            {
+                isReparsePoint = (File.GetAttributes(subdirectory) & FileAttributes.ReparsePoint) != 0;
+            }
+            catch (Exception)
+            {
+                continue;
+            }
+
+            // Do not follow junctions / symlinks: they can redirect enumeration
+            // to files outside the chosen folder tree.
+            if (isReparsePoint)
+            {
+                continue;
+            }
+
+            foreach (string file in EnumerateDirectory(subdirectory))
+            {
+                yield return file;
+            }
+        }
+    }
+
+    private bool IsMatch(string name)
+    {
+        try
+        {
+            return _matcher.IsMatch(name);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return false;
+        }
+    }
+
+    private void RaiseLines(IReadOnlyList<LogRow> rows) => LinesArrived?.Invoke(rows);
+
+    private void RaiseNotice(string message) => Notice?.Invoke(message);
+
+    private void NotifyError(string file, string message)
+    {
+        string key = file + "|" + message;
+        lock (_gate)
+        {
+            if (!_notified.Add(key))
+            {
+                return;
+            }
+        }
+
+        RaiseNotice($"{Path.GetFileName(file)}: {message}");
     }
 
     private static Regex BuildMatcher(string globPattern)
@@ -209,7 +373,10 @@ public sealed class FolderTailer : IDisposable
             "|",
             patterns.Select(p => "(?:" + WildcardToRegex(p) + ")"));
 
-        return new Regex("^(?:" + combined + ")$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        return new Regex(
+            "^(?:" + combined + ")$",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled,
+            TimeSpan.FromMilliseconds(250));
     }
 
     private static string WildcardToRegex(string pattern)
