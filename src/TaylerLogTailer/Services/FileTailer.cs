@@ -5,12 +5,24 @@ namespace TaylerLogTailer.Services;
 
 /// <summary>
 /// Follows a single file. Tracks a byte offset and decodes newly appended
-/// content into complete lines. Handles partial trailing lines (held until the
-/// terminating newline arrives) and file truncation / rotation (offset reset).
+/// content into complete lines. Reads are performed in bounded chunks and the
+/// in-progress line buffer is capped, so neither a very large append nor a file
+/// with no line breaks can exhaust memory. Handles partial trailing lines (held
+/// until the terminating newline arrives) and file truncation / rotation
+/// (offset reset).
 /// </summary>
 public sealed class FileTailer
 {
     private static readonly Encoding Utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+
+    /// <summary>Maximum bytes read into memory in a single read operation.</summary>
+    private const int ReadChunkBytes = 1024 * 1024;
+
+    /// <summary>
+    /// Maximum bytes buffered for a single not-yet-terminated line. A line that
+    /// exceeds this is flushed as-is to bound memory for newline-free input.
+    /// </summary>
+    private const int MaxPendingBytes = 1024 * 1024;
 
     private readonly List<byte> _pending = new();
     private long _position;
@@ -26,6 +38,12 @@ public sealed class FileTailer
     public string FileName { get; }
 
     /// <summary>
+    /// The message of the most recent IO/access error, or <c>null</c> if the
+    /// last operation succeeded. Cleared at the start of each operation.
+    /// </summary>
+    public string? LastError { get; private set; }
+
+    /// <summary>
     /// Positions the tailer. When <paramref name="initialLines"/> is greater
     /// than zero, returns up to that many of the most recent existing lines and
     /// leaves the read offset at the end of the file. When it is zero, no
@@ -33,6 +51,7 @@ public sealed class FileTailer
     /// </summary>
     public IReadOnlyList<string> Initialize(int initialLines)
     {
+        LastError = null;
         var output = new List<string>();
         try
         {
@@ -50,32 +69,24 @@ public sealed class FileTailer
             const long capBytes = 8L * 1024 * 1024;
             long start = length > capBytes ? length - capBytes : 0;
             fs.Seek(start, SeekOrigin.Begin);
-
-            byte[] buffer = new byte[length - start];
-            int read = ReadFully(fs, buffer);
-            _position = length;
-
-            int offset = 0;
-            if (start > 0)
-            {
-                // Started mid-file; discard the partial first line.
-                int nl = Array.IndexOf(buffer, (byte)'\n', 0, read);
-                offset = nl >= 0 ? nl + 1 : read;
-            }
+            _position = start;
 
             _pending.Clear();
-            ProcessBytes(buffer, offset, read, output);
+            DrainStream(fs, length, output, skipFirstPartialLine: start > 0);
+            _position = length;
 
             if (output.Count > initialLines)
             {
                 output.RemoveRange(0, output.Count - initialLines);
             }
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            LastError = ex.Message;
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
+            LastError = ex.Message;
         }
 
         return output;
@@ -87,6 +98,7 @@ public sealed class FileTailer
     /// </summary>
     public IReadOnlyList<string> ReadNew()
     {
+        LastError = null;
         var output = new List<string>();
         try
         {
@@ -108,20 +120,55 @@ public sealed class FileTailer
             }
 
             fs.Seek(_position, SeekOrigin.Begin);
-            byte[] buffer = new byte[length - _position];
-            int read = ReadFully(fs, buffer);
-            _position += read;
-
-            ProcessBytes(buffer, 0, read, output);
+            DrainStream(fs, length, output, skipFirstPartialLine: false);
         }
-        catch (IOException)
+        catch (IOException ex)
         {
+            LastError = ex.Message;
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
+            LastError = ex.Message;
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Reads from the current position up to <paramref name="length"/> in
+    /// bounded chunks, decoding complete lines into <paramref name="output"/>.
+    /// </summary>
+    private void DrainStream(Stream stream, long length, List<string> output, bool skipFirstPartialLine)
+    {
+        byte[] buffer = new byte[(int)Math.Min(length - _position, ReadChunkBytes)];
+        bool skipping = skipFirstPartialLine;
+
+        while (_position < length)
+        {
+            int want = (int)Math.Min(length - _position, buffer.Length);
+            int read = stream.Read(buffer, 0, want);
+            if (read == 0)
+            {
+                break;
+            }
+
+            _position += read;
+
+            int offset = 0;
+            if (skipping)
+            {
+                int nl = Array.IndexOf(buffer, (byte)'\n', 0, read);
+                if (nl < 0)
+                {
+                    continue;
+                }
+
+                offset = nl + 1;
+                skipping = false;
+            }
+
+            ProcessBytes(buffer, offset, read, output);
+        }
     }
 
     private void ProcessBytes(byte[] buffer, int offset, int count, List<string> output)
@@ -137,6 +184,13 @@ public sealed class FileTailer
             else
             {
                 _pending.Add(b);
+                if (_pending.Count >= MaxPendingBytes)
+                {
+                    // Bound memory for a line with no terminator: flush what we
+                    // have and keep accumulating the remainder.
+                    output.Add(DecodePending());
+                    _pending.Clear();
+                }
             }
         }
     }
@@ -150,22 +204,5 @@ public sealed class FileTailer
         }
 
         return count == 0 ? string.Empty : Utf8.GetString(_pending.ToArray(), 0, count);
-    }
-
-    private static int ReadFully(Stream stream, byte[] buffer)
-    {
-        int total = 0;
-        while (total < buffer.Length)
-        {
-            int read = stream.Read(buffer, total, buffer.Length - total);
-            if (read == 0)
-            {
-                break;
-            }
-
-            total += read;
-        }
-
-        return total;
     }
 }

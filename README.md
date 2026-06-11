@@ -58,6 +58,18 @@ Settings are stored as JSON at:
 Each remembered window records its folder, glob pattern, initial-lines count,
 recursive and auto-scroll flags, and window bounds.
 
+## Limits and safety
+
+- Up to 4096 matching files are followed per window.  If a folder contains more,
+  a notice is shown and the remaining files are not tailed.
+- Recursive watching does not follow directory junctions or symbolic links, so
+  enumeration stays within the chosen folder tree.
+- Per-file memory is bounded: reads are chunked and the buffer for a single
+  not-yet-terminated line is capped, so a very large append or a file with no
+  line breaks cannot exhaust memory.
+- Non-fatal conditions (access denied, watcher unavailable, file limit reached)
+  are surfaced in the window status bar rather than failing silently.
+
 ## Build and run
 
 Requires the .NET 10 SDK (Windows).

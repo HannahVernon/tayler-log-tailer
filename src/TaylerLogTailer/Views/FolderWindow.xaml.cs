@@ -39,14 +39,21 @@ public partial class FolderWindow : Window
 
     private void ApplyWindowBounds()
     {
-        Width = _config.Width;
-        Height = _config.Height;
+        double width = Clamp(_config.Width, 320, SystemParameters.VirtualScreenWidth);
+        double height = Clamp(_config.Height, 200, SystemParameters.VirtualScreenHeight);
+        Width = width;
+        Height = height;
 
         if (_config.Left is double left && _config.Top is double top)
         {
+            double minLeft = SystemParameters.VirtualScreenLeft;
+            double minTop = SystemParameters.VirtualScreenTop;
+            double maxLeft = minLeft + Math.Max(0, SystemParameters.VirtualScreenWidth - width);
+            double maxTop = minTop + Math.Max(0, SystemParameters.VirtualScreenHeight - height);
+
             WindowStartupLocation = WindowStartupLocation.Manual;
-            Left = left;
-            Top = top;
+            Left = Clamp(left, minLeft, maxLeft);
+            Top = Clamp(top, minTop, maxTop);
         }
         else
         {
@@ -57,6 +64,21 @@ public partial class FolderWindow : Window
         {
             WindowState = WindowState.Maximized;
         }
+    }
+
+    private static double Clamp(double value, double min, double max)
+    {
+        if (max < min)
+        {
+            return min;
+        }
+
+        if (double.IsNaN(value))
+        {
+            return min;
+        }
+
+        return Math.Min(Math.Max(value, min), max);
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -93,10 +115,13 @@ public partial class FolderWindow : Window
         };
 
         tailer.LinesArrived += OnLinesArrived;
+        tailer.Notice += OnNotice;
         _tailer = tailer;
 
         UpdateStatus("Starting\u2026");
-        System.Threading.Tasks.Task.Run(tailer.Start);
+        System.Threading.Tasks.Task.Run(tailer.Start).ContinueWith(
+            t => Dispatcher.BeginInvoke(() => OnNotice($"Could not start tailing: {t.Exception?.GetBaseException().Message}")),
+            System.Threading.Tasks.TaskContinuationOptions.OnlyOnFaulted);
     }
 
     private void StopTailing()
@@ -104,9 +129,15 @@ public partial class FolderWindow : Window
         if (_tailer is not null)
         {
             _tailer.LinesArrived -= OnLinesArrived;
+            _tailer.Notice -= OnNotice;
             _tailer.Dispose();
             _tailer = null;
         }
+    }
+
+    private void OnNotice(string message)
+    {
+        Dispatcher.BeginInvoke(() => StatusText.Text = message);
     }
 
     private void OnLinesArrived(IReadOnlyList<LogRow> rows)

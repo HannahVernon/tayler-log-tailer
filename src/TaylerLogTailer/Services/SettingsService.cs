@@ -56,8 +56,10 @@ public sealed class SettingsService
             string json = JsonSerializer.Serialize(settings, JsonOptions);
             string tempPath = _filePath + ".tmp";
             File.WriteAllText(tempPath, json);
-            File.Copy(tempPath, _filePath, overwrite: true);
-            File.Delete(tempPath);
+
+            // Atomic replace so a crash mid-write cannot leave a stray temp file
+            // or a half-written settings file.
+            File.Move(tempPath, _filePath, overwrite: true);
         }
     }
 }
