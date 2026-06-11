@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TaylerLogTailer/TaylerLogTailer.csproj" />
+  </Folder>
+</Solution>
