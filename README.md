@@ -89,6 +89,8 @@ Tayler.slnx                          Solution
 Directory.Build.props                NuGet audit / build policy
 src/TaylerLogTailer/
   App.xaml(.cs)                      App startup; reopens remembered folders
+  Assets/
+    app.ico                          Application / window icon (gecko-tail motif)
   Models/
     LogRow.cs                        A single displayed log line (file + text)
     FolderConfig.cs                  Per-window persisted settings
