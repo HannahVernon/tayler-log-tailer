@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Tayler Log Tailer"
+        Icon="/Assets/app.ico"
         Width="1000" Height="640"
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display"
@@ -28,36 +29,38 @@
                         Margin="0,0,0,0" Content="📁 Folder…" Click="OnChooseFolder"
                         ToolTip="Choose the folder of log files to tail" />
 
-                <Button x:Name="NewWindowButton" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
-                        Content="New Window" Click="OnNewWindow"
-                        ToolTip="Open another window for a different folder" />
-                <Button x:Name="ForgetButton" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
-                        Content="Forget" Click="OnForget"
-                        ToolTip="Close this window and stop reopening this folder on next run" />
-                <Button x:Name="ClearButton" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
-                        Content="Clear" Click="OnClear"
-                        ToolTip="Clear the current view (does not change the files)" />
-                <Button x:Name="PauseButton" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
-                        Content="Pause" Click="OnTogglePause"
-                        ToolTip="Pause or resume following the log files" />
-                <Button x:Name="ApplyButton" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
-                        Content="Apply" Click="OnApply"
-                        ToolTip="Apply the pattern / options and restart tailing" />
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <TextBlock VerticalAlignment="Center" Margin="8,0,2,0" Text="Pattern:" />
+                    <TextBox x:Name="PatternBox" VerticalAlignment="Center"
+                             Width="110" Text="*.log"
+                             ToolTip="One or more glob patterns separated by ';' (e.g. *.log;*.txt)" />
 
-                <CheckBox x:Name="AutoScrollCheck" DockPanel.Dock="Right" VerticalAlignment="Center"
-                          Margin="8,0,2,0" Content="Auto-scroll" IsChecked="True" />
-                <CheckBox x:Name="RecursiveCheck" DockPanel.Dock="Right" VerticalAlignment="Center"
-                          Margin="8,0,0,0" Content="Subfolders" />
+                    <TextBlock VerticalAlignment="Center" Margin="8,0,2,0" Text="Lines:" />
+                    <TextBox x:Name="LinesBox" VerticalAlignment="Center"
+                             Width="44" Text="0"
+                             ToolTip="Number of existing lines to show from each file (0 = only new lines)" />
 
-                <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" Margin="8,0,2,0" Text="Lines:" />
-                <TextBox x:Name="LinesBox" DockPanel.Dock="Right" VerticalAlignment="Center"
-                         Width="44" Text="0"
-                         ToolTip="Number of existing lines to show from each file (0 = only new lines)" />
+                    <CheckBox x:Name="RecursiveCheck" VerticalAlignment="Center"
+                              Margin="8,0,0,0" Content="Subfolders" />
+                    <CheckBox x:Name="AutoScrollCheck" VerticalAlignment="Center"
+                              Margin="8,0,0,0" Content="Auto-scroll" IsChecked="True" />
 
-                <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" Margin="8,0,2,0" Text="Pattern:" />
-                <TextBox x:Name="PatternBox" DockPanel.Dock="Right" VerticalAlignment="Center"
-                         Width="110" Text="*.log"
-                         ToolTip="One or more glob patterns separated by ';' (e.g. *.log;*.txt)" />
+                    <Button x:Name="ApplyButton" Style="{StaticResource ToolButton}"
+                            Margin="8,0,0,0" Content="Apply" Click="OnApply"
+                            ToolTip="Apply the pattern / options and restart tailing" />
+                    <Button x:Name="PauseButton" Style="{StaticResource ToolButton}"
+                            Content="Pause" Click="OnTogglePause"
+                            ToolTip="Pause or resume following the log files" />
+                    <Button x:Name="ClearButton" Style="{StaticResource ToolButton}"
+                            Content="Clear" Click="OnClear"
+                            ToolTip="Clear the current view (does not change the files)" />
+                    <Button x:Name="ForgetButton" Style="{StaticResource ToolButton}"
+                            Content="Forget" Click="OnForget"
+                            ToolTip="Close this window and stop reopening this folder on next run" />
+                    <Button x:Name="NewWindowButton" Style="{StaticResource ToolButton}"
+                            Content="New Window" Click="OnNewWindow"
+                            ToolTip="Open another window for a different folder" />
+                </StackPanel>
 
                 <TextBox x:Name="FolderText" VerticalAlignment="Center" Margin="6,0"
                          IsReadOnly="True" Background="Transparent" BorderThickness="0"
@@ -75,41 +78,50 @@
         </Border>
 
         <!-- Combined log view -->
-        <DataGrid x:Name="LogGrid"
-                  AutoGenerateColumns="False"
-                  IsReadOnly="True"
-                  CanUserAddRows="False"
-                  CanUserDeleteRows="False"
-                  CanUserResizeRows="False"
-                  HeadersVisibility="Column"
-                  SelectionMode="Extended"
-                  SelectionUnit="FullRow"
-                  GridLinesVisibility="None"
-                  AlternatingRowBackground="#FFF7F7F7"
-                  RowHeight="17"
-                  ColumnHeaderHeight="20"
-                  FontFamily="Consolas"
-                  FontSize="12"
-                  BorderThickness="0"
-                  VirtualizingPanel.IsVirtualizing="True"
-                  VirtualizingPanel.VirtualizationMode="Recycling"
-                  EnableRowVirtualization="True"
-                  EnableColumnVirtualization="False">
-            <DataGrid.Resources>
-                <Style TargetType="DataGridCell">
-                    <Setter Property="Padding" Value="4,0" />
-                    <Setter Property="BorderThickness" Value="0" />
-                </Style>
-                <Style TargetType="DataGridColumnHeader">
-                    <Setter Property="Padding" Value="4,1" />
-                    <Setter Property="FontWeight" Value="SemiBold" />
-                </Style>
-            </DataGrid.Resources>
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="File" Binding="{Binding FileName}"
-                                    Width="Auto" MinWidth="90" />
-                <DataGridTextColumn Header="Log" Binding="{Binding Text}" Width="*" />
-            </DataGrid.Columns>
-        </DataGrid>
+        <Grid Background="White">
+            <Image Source="/Assets/watermark.png" Stretch="Uniform"
+                   Width="380" Opacity="0.08"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   IsHitTestVisible="False" />
+            <DataGrid x:Name="LogGrid"
+                      AutoGenerateColumns="False"
+                      IsReadOnly="True"
+                      CanUserAddRows="False"
+                      CanUserDeleteRows="False"
+                      CanUserResizeRows="False"
+                      HeadersVisibility="Column"
+                      SelectionMode="Extended"
+                      SelectionUnit="FullRow"
+                      GridLinesVisibility="None"
+                      Background="Transparent"
+                      RowBackground="Transparent"
+                      AlternatingRowBackground="#0A000000"
+                      RowHeight="17"
+                      ColumnHeaderHeight="20"
+                      FontFamily="Consolas"
+                      FontSize="12"
+                      BorderThickness="0"
+                      VirtualizingPanel.IsVirtualizing="True"
+                      VirtualizingPanel.VirtualizationMode="Recycling"
+                      EnableRowVirtualization="True"
+                      EnableColumnVirtualization="False">
+                <DataGrid.Resources>
+                    <Style TargetType="DataGridCell">
+                        <Setter Property="Padding" Value="4,0" />
+                        <Setter Property="BorderThickness" Value="0" />
+                        <Setter Property="Background" Value="Transparent" />
+                    </Style>
+                    <Style TargetType="DataGridColumnHeader">
+                        <Setter Property="Padding" Value="4,1" />
+                        <Setter Property="FontWeight" Value="SemiBold" />
+                    </Style>
+                </DataGrid.Resources>
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="File" Binding="{Binding FileName}"
+                                        Width="Auto" MinWidth="90" />
+                    <DataGridTextColumn Header="Log" Binding="{Binding Text}" Width="*" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </Grid>
     </DockPanel>
 </Window>
