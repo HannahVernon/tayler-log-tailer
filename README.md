@@ -91,6 +91,7 @@ src/TaylerLogTailer/
   App.xaml(.cs)                      App startup; reopens remembered folders
   Assets/
     app.ico                          Application / window icon (gecko-tail motif)
+    watermark.png                    Faint greyscale backdrop behind the log view
   Models/
     LogRow.cs                        A single displayed log line (file + text)
     FolderConfig.cs                  Per-window persisted settings
