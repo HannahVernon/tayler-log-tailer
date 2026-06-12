@@ -28,36 +28,38 @@
                         Margin="0,0,0,0" Content="📁 Folder…" Click="OnChooseFolder"
                         ToolTip="Choose the folder of log files to tail" />
 
-                <Button x:Name="NewWindowButton" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
-                        Content="New Window" Click="OnNewWindow"
-                        ToolTip="Open another window for a different folder" />
-                <Button x:Name="ForgetButton" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
-                        Content="Forget" Click="OnForget"
-                        ToolTip="Close this window and stop reopening this folder on next run" />
-                <Button x:Name="ClearButton" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
-                        Content="Clear" Click="OnClear"
-                        ToolTip="Clear the current view (does not change the files)" />
-                <Button x:Name="PauseButton" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
-                        Content="Pause" Click="OnTogglePause"
-                        ToolTip="Pause or resume following the log files" />
-                <Button x:Name="ApplyButton" DockPanel.Dock="Right" Style="{StaticResource ToolButton}"
-                        Content="Apply" Click="OnApply"
-                        ToolTip="Apply the pattern / options and restart tailing" />
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <TextBlock VerticalAlignment="Center" Margin="8,0,2,0" Text="Pattern:" />
+                    <TextBox x:Name="PatternBox" VerticalAlignment="Center"
+                             Width="110" Text="*.log"
+                             ToolTip="One or more glob patterns separated by ';' (e.g. *.log;*.txt)" />
 
-                <CheckBox x:Name="AutoScrollCheck" DockPanel.Dock="Right" VerticalAlignment="Center"
-                          Margin="8,0,2,0" Content="Auto-scroll" IsChecked="True" />
-                <CheckBox x:Name="RecursiveCheck" DockPanel.Dock="Right" VerticalAlignment="Center"
-                          Margin="8,0,0,0" Content="Subfolders" />
+                    <TextBlock VerticalAlignment="Center" Margin="8,0,2,0" Text="Lines:" />
+                    <TextBox x:Name="LinesBox" VerticalAlignment="Center"
+                             Width="44" Text="0"
+                             ToolTip="Number of existing lines to show from each file (0 = only new lines)" />
 
-                <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" Margin="8,0,2,0" Text="Lines:" />
-                <TextBox x:Name="LinesBox" DockPanel.Dock="Right" VerticalAlignment="Center"
-                         Width="44" Text="0"
-                         ToolTip="Number of existing lines to show from each file (0 = only new lines)" />
+                    <CheckBox x:Name="RecursiveCheck" VerticalAlignment="Center"
+                              Margin="8,0,0,0" Content="Subfolders" />
+                    <CheckBox x:Name="AutoScrollCheck" VerticalAlignment="Center"
+                              Margin="8,0,0,0" Content="Auto-scroll" IsChecked="True" />
 
-                <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" Margin="8,0,2,0" Text="Pattern:" />
-                <TextBox x:Name="PatternBox" DockPanel.Dock="Right" VerticalAlignment="Center"
-                         Width="110" Text="*.log"
-                         ToolTip="One or more glob patterns separated by ';' (e.g. *.log;*.txt)" />
+                    <Button x:Name="ApplyButton" Style="{StaticResource ToolButton}"
+                            Margin="8,0,0,0" Content="Apply" Click="OnApply"
+                            ToolTip="Apply the pattern / options and restart tailing" />
+                    <Button x:Name="PauseButton" Style="{StaticResource ToolButton}"
+                            Content="Pause" Click="OnTogglePause"
+                            ToolTip="Pause or resume following the log files" />
+                    <Button x:Name="ClearButton" Style="{StaticResource ToolButton}"
+                            Content="Clear" Click="OnClear"
+                            ToolTip="Clear the current view (does not change the files)" />
+                    <Button x:Name="ForgetButton" Style="{StaticResource ToolButton}"
+                            Content="Forget" Click="OnForget"
+                            ToolTip="Close this window and stop reopening this folder on next run" />
+                    <Button x:Name="NewWindowButton" Style="{StaticResource ToolButton}"
+                            Content="New Window" Click="OnNewWindow"
+                            ToolTip="Open another window for a different folder" />
+                </StackPanel>
 
                 <TextBox x:Name="FolderText" VerticalAlignment="Center" Margin="6,0"
                          IsReadOnly="True" Background="Transparent" BorderThickness="0"
