@@ -78,41 +78,50 @@
         </Border>
 
         <!-- Combined log view -->
-        <DataGrid x:Name="LogGrid"
-                  AutoGenerateColumns="False"
-                  IsReadOnly="True"
-                  CanUserAddRows="False"
-                  CanUserDeleteRows="False"
-                  CanUserResizeRows="False"
-                  HeadersVisibility="Column"
-                  SelectionMode="Extended"
-                  SelectionUnit="FullRow"
-                  GridLinesVisibility="None"
-                  AlternatingRowBackground="#FFF7F7F7"
-                  RowHeight="17"
-                  ColumnHeaderHeight="20"
-                  FontFamily="Consolas"
-                  FontSize="12"
-                  BorderThickness="0"
-                  VirtualizingPanel.IsVirtualizing="True"
-                  VirtualizingPanel.VirtualizationMode="Recycling"
-                  EnableRowVirtualization="True"
-                  EnableColumnVirtualization="False">
-            <DataGrid.Resources>
-                <Style TargetType="DataGridCell">
-                    <Setter Property="Padding" Value="4,0" />
-                    <Setter Property="BorderThickness" Value="0" />
-                </Style>
-                <Style TargetType="DataGridColumnHeader">
-                    <Setter Property="Padding" Value="4,1" />
-                    <Setter Property="FontWeight" Value="SemiBold" />
-                </Style>
-            </DataGrid.Resources>
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="File" Binding="{Binding FileName}"
-                                    Width="Auto" MinWidth="90" />
-                <DataGridTextColumn Header="Log" Binding="{Binding Text}" Width="*" />
-            </DataGrid.Columns>
-        </DataGrid>
+        <Grid Background="White">
+            <Image Source="/Assets/watermark.png" Stretch="Uniform"
+                   Width="380" Opacity="0.08"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   IsHitTestVisible="False" />
+            <DataGrid x:Name="LogGrid"
+                      AutoGenerateColumns="False"
+                      IsReadOnly="True"
+                      CanUserAddRows="False"
+                      CanUserDeleteRows="False"
+                      CanUserResizeRows="False"
+                      HeadersVisibility="Column"
+                      SelectionMode="Extended"
+                      SelectionUnit="FullRow"
+                      GridLinesVisibility="None"
+                      Background="Transparent"
+                      RowBackground="Transparent"
+                      AlternatingRowBackground="#0A000000"
+                      RowHeight="17"
+                      ColumnHeaderHeight="20"
+                      FontFamily="Consolas"
+                      FontSize="12"
+                      BorderThickness="0"
+                      VirtualizingPanel.IsVirtualizing="True"
+                      VirtualizingPanel.VirtualizationMode="Recycling"
+                      EnableRowVirtualization="True"
+                      EnableColumnVirtualization="False">
+                <DataGrid.Resources>
+                    <Style TargetType="DataGridCell">
+                        <Setter Property="Padding" Value="4,0" />
+                        <Setter Property="BorderThickness" Value="0" />
+                        <Setter Property="Background" Value="Transparent" />
+                    </Style>
+                    <Style TargetType="DataGridColumnHeader">
+                        <Setter Property="Padding" Value="4,1" />
+                        <Setter Property="FontWeight" Value="SemiBold" />
+                    </Style>
+                </DataGrid.Resources>
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="File" Binding="{Binding FileName}"
+                                        Width="Auto" MinWidth="90" />
+                    <DataGridTextColumn Header="Log" Binding="{Binding Text}" Width="*" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </Grid>
     </DockPanel>
 </Window>
