@@ -82,6 +82,29 @@ dotnet run --project src/TaylerLogTailer -c Release
 The compiled executable is produced at
 `src/TaylerLogTailer/bin/Release/net10.0-windows/TaylerLogTailer.exe`.
 
+## Installer
+
+A Windows installer is built with [Inno Setup 6](https://jrsoftware.org/isinfo.php).
+The installer is per-machine (installs to Program Files, requires administrator
+elevation), x64-only, and **self-contained**: the .NET 10 runtime is bundled, so
+no separate runtime install is needed on the target machine.
+
+With Inno Setup 6 installed, run the helper script from the repository root:
+
+```
+powershell -ExecutionPolicy Bypass -File installer\build-installer.ps1
+```
+
+This publishes a self-contained x64 build to `publish\win-x64`, then compiles
+`installer\TaylerLogTailer.iss` into a setup executable under `dist\`
+(for example `dist\TaylerLogTailer-1.0.0.0-setup-x64.exe`).  Both `publish\` and
+`dist\` are build artifacts and are git-ignored.
+
+The setup offers an optional desktop shortcut (unchecked by default) and always
+creates a Start Menu entry.  The installer version is taken from the published
+executable, which comes from the `<Version>` property in
+`src/TaylerLogTailer/TaylerLogTailer.csproj`.
+
 ## Project layout
 
 ```
@@ -102,4 +125,7 @@ src/TaylerLogTailer/
     FolderTailer.cs                  FileSystemWatcher + polling over a folder
   Views/
     FolderWindow.xaml(.cs)           The compact folder window UI
+installer/
+  TaylerLogTailer.iss                Inno Setup script (per-machine, x64, self-contained)
+  build-installer.ps1                Publishes the app then compiles the installer
 ```

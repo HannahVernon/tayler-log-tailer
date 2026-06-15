@@ -18,3 +18,7 @@ obj/
 
 ## Throwaway local test harnesses
 __tailtest/
+
+## Build / packaging artifacts
+publish/
+dist/

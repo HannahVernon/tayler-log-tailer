@@ -7,6 +7,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <Version>1.0.0</Version>
+    <Company>Hannah Vernon</Company>
+    <Product>Tayler Log Tailer</Product>
+    <Copyright>Copyright (c) 2026 Hannah Vernon</Copyright>
   </PropertyGroup>
 
   <ItemGroup>
