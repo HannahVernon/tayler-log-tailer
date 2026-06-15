@@ -15,9 +15,13 @@ Package | Version | Copyright holder | License
 
 ## Build-time tooling
 
-The Windows installer is produced with **Inno Setup 6** (Copyright (c) 1997-2026
-Jordan Russell and Martijn Laan), used under the Inno Setup License (a permissive
-modified-BSD-style license).  Inno Setup is a build-time tool only; none of its
-code is redistributed inside the application itself.  The generated setup
-executable includes the standard Inno Setup installer stub, as is normal for any
-Inno-built installer.
+The following tools are used only at build time; none of their code is
+redistributed inside the application (both are referenced with
+`PrivateAssets="All"` or run outside the build):
+
+- **MinVer** 6.0.0 (Copyright (c) Adam Ralph), MIT License - derives the
+  assembly version from git tags during build.
+- **Inno Setup 6** (Copyright (c) 1997-2026 Jordan Russell and Martijn Laan),
+  Inno Setup License (a permissive modified-BSD-style license) - builds the
+  Windows installer.  The generated setup executable includes the standard Inno
+  Setup installer stub, as is normal for any Inno-built installer.

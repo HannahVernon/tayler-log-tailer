@@ -101,15 +101,35 @@ This publishes a self-contained x64 build to `publish\win-x64`, then compiles
 `dist\` are build artifacts and are git-ignored.
 
 The setup offers an optional desktop shortcut (unchecked by default) and always
-creates a Start Menu entry.  The installer version is taken from the published
-executable, which comes from the `<Version>` property in
-`src/TaylerLogTailer/TaylerLogTailer.csproj`.
+creates a Start Menu entry.  The installer version comes from the published
+executable's file version, which is derived from git tags by MinVer (see
+Versioning below).
+
+## Versioning
+
+The assembly and installer version is derived automatically from git tags by
+[MinVer](https://github.com/adamralph/minver), configured in
+`Directory.Build.props`.  Tags follow the format `v{Major}.{Minor}.{Patch}`:
+
+- **Major** - set manually when tagging, bumped for breaking changes.
+- **Minor** - auto-incremented by the Version Bump workflow on each `dev` to
+  `main` merge.
+- **Patch** - set to the merged pull request number by the Version Bump workflow.
+
+The `.github/workflows/version-bump.yml` Forgejo Actions workflow runs when a PR
+into `main` is merged: it finds the latest tag, computes the next version, and
+pushes a new `v{Major}.{Minor}.{Patch}` tag.  Builds between tags get a
+pre-release suffix (for example `1.1.7-alpha.0.5`).  Building from a source tree
+without git history produces a `0.0.0` development version.
 
 ## Project layout
 
 ```
 Tayler.slnx                          Solution
-Directory.Build.props                NuGet audit / build policy
+Directory.Build.props                NuGet audit / build policy; MinVer versioning
+.github/
+  workflows/
+    version-bump.yml                 Auto-tags a new version on each dev->main merge
 src/TaylerLogTailer/
   App.xaml(.cs)                      App startup; reopens remembered folders
   Assets/
