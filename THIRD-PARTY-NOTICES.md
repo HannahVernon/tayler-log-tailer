@@ -12,3 +12,16 @@ If a third-party dependency is added in the future, record it here with:
 Package | Version | Copyright holder | License
 ------- | ------- | ---------------- | -------
 (none)  |         |                  |
+
+## Build-time tooling
+
+The following tools are used only at build time; none of their code is
+redistributed inside the application (both are referenced with
+`PrivateAssets="All"` or run outside the build):
+
+- **MinVer** 6.0.0 (Copyright (c) Adam Ralph), MIT License - derives the
+  assembly version from git tags during build.
+- **Inno Setup 6** (Copyright (c) 1997-2026 Jordan Russell and Martijn Laan),
+  Inno Setup License (a permissive modified-BSD-style license) - builds the
+  Windows installer.  The generated setup executable includes the standard Inno
+  Setup installer stub, as is normal for any Inno-built installer.
