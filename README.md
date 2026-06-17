@@ -69,6 +69,20 @@ recursive and auto-scroll flags, and window bounds.
   line breaks cannot exhaust memory.
 - Non-fatal conditions (access denied, watcher unavailable, file limit reached)
   are surfaced in the window status bar rather than failing silently.
+- New content is detected by reading through to the end of each file rather than
+  trusting the reported file length, so tailing keeps working on network shares
+  where the cached length can lag behind appended data.  If the file watcher is
+  interrupted (for example an internal-buffer overflow on a busy folder), the
+  periodic poll continues regardless and a notice is shown.
+
+## Status bar
+
+The status bar shows the watched folder, the current row count, the number of
+matched files being followed, the follow state (Following / Paused / Starting),
+the time the most recent new line arrived ("last new HH:mm:ss"), and the most
+recent notice if any.  The "last new" time makes a stalled source easy to spot:
+if files are still being written but the time stops advancing, the source or
+share is not delivering new content.
 
 ## Build and run
 

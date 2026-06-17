@@ -18,6 +18,10 @@ public partial class FolderWindow : Window
     private FolderTailer? _tailer;
     private bool _paused;
     private bool _forgetting;
+    private int _fileCount;
+    private DateTime? _lastDataAt;
+    private string? _lastNotice;
+    private string _state = "Idle";
 
     public FolderWindow(FolderConfig config)
     {
@@ -116,7 +120,12 @@ public partial class FolderWindow : Window
 
         tailer.LinesArrived += OnLinesArrived;
         tailer.Notice += OnNotice;
+        tailer.DiscoveryCompleted += OnDiscoveryCompleted;
         _tailer = tailer;
+
+        _fileCount = 0;
+        _lastDataAt = null;
+        _lastNotice = null;
 
         UpdateStatus("Starting\u2026");
         System.Threading.Tasks.Task.Run(tailer.Start).ContinueWith(
@@ -130,6 +139,7 @@ public partial class FolderWindow : Window
         {
             _tailer.LinesArrived -= OnLinesArrived;
             _tailer.Notice -= OnNotice;
+            _tailer.DiscoveryCompleted -= OnDiscoveryCompleted;
             _tailer.Dispose();
             _tailer = null;
         }
@@ -137,7 +147,25 @@ public partial class FolderWindow : Window
 
     private void OnNotice(string message)
     {
-        Dispatcher.BeginInvoke(() => StatusText.Text = message);
+        Dispatcher.BeginInvoke(() =>
+        {
+            _lastNotice = message;
+            RefreshStatus();
+        });
+    }
+
+    private void OnDiscoveryCompleted(int fileCount)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            _fileCount = fileCount;
+            if (_state is "Starting\u2026" or "Idle")
+            {
+                _state = _paused ? "Paused" : "Following";
+            }
+
+            RefreshStatus();
+        });
     }
 
     private void OnLinesArrived(IReadOnlyList<LogRow> rows)
@@ -167,12 +195,46 @@ public partial class FolderWindow : Window
             LogGrid.ScrollIntoView(_rows[^1]);
         }
 
+        if (rows.Count > 0)
+        {
+            _lastDataAt = DateTime.Now;
+        }
+
         UpdateStatus(_paused ? "Paused" : "Following");
     }
 
     private void UpdateStatus(string state)
     {
-        StatusText.Text = $"{_config.FolderPath}    \u2022    {_rows.Count:N0} rows    \u2022    {state}";
+        _state = state;
+        RefreshStatus();
+    }
+
+    private void RefreshStatus()
+    {
+        if (string.IsNullOrWhiteSpace(_config.FolderPath))
+        {
+            StatusText.Text = _state;
+            return;
+        }
+
+        const string sep = "    \u2022    ";
+        var sb = new System.Text.StringBuilder();
+        sb.Append(_config.FolderPath);
+        sb.Append(sep).Append($"{_rows.Count:N0} rows");
+        sb.Append(sep).Append($"{_fileCount:N0} files");
+        sb.Append(sep).Append(_state);
+
+        if (_lastDataAt is DateTime t)
+        {
+            sb.Append(sep).Append("last new ").Append(t.ToString("HH:mm:ss"));
+        }
+
+        if (!string.IsNullOrEmpty(_lastNotice))
+        {
+            sb.Append(sep).Append(_lastNotice);
+        }
+
+        StatusText.Text = sb.ToString();
     }
 
     private void UpdateConfigFromControls()
