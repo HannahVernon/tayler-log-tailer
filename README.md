@@ -95,6 +95,18 @@ share is not delivering new content.
 
 Requires the .NET 10 SDK (Windows).
 
+The repository root has a `build.ps1` helper that restores and builds the
+solution (warnings are treated as errors, so a clean build is 0 / 0):
+
+```
+.\build.ps1                 # restore + build (Release)
+.\build.ps1 -Configuration Debug
+.\build.ps1 -Publish        # also produce a self-contained win-x64 build
+.\build.ps1 -Clean -Installer   # clean, build, and produce the installer
+```
+
+Or drive `dotnet` directly:
+
 ```
 dotnet build Tayler.slnx -c Release
 dotnet run --project src/TaylerLogTailer -c Release
@@ -147,6 +159,7 @@ without git history produces a `0.0.0` development version.
 
 ```
 Tayler.slnx                          Solution
+build.ps1                            Restore/build/publish/installer helper
 Directory.Build.props                NuGet audit / build policy; MinVer versioning
 .github/
   workflows/
@@ -159,6 +172,7 @@ src/TaylerLogTailer/
   Models/
     LogRow.cs                        A single displayed log line (file + text)
     FolderConfig.cs                  Per-window persisted settings
+    BoundedLogCollection.cs          Row collection with bulk head-trim at the cap
     AppSettings.cs                   Root settings (set of windows)
   Services/
     SettingsService.cs               Load/save settings JSON
