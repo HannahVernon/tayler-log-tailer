@@ -13,6 +13,8 @@ Built with WPF on .NET 10 (Windows).
 - One window per folder.  Open as many windows as you like, each watching a
   different folder.
 - Combined view with two columns: the originating file name and the log line.
+  Selecting a row highlights it with a high-contrast colour so the text stays
+  readable while selected.
 - Automatic tailing via `FileSystemWatcher` plus a periodic poll fallback, so
   rapid writes and network shares are both handled.
 - New log files created in a watched folder start showing up automatically.
