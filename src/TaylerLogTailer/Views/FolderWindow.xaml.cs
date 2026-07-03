@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using System.Windows;
 using Microsoft.Win32;
 using TaylerLogTailer.Models;
@@ -13,7 +12,7 @@ namespace TaylerLogTailer.Views;
 public partial class FolderWindow : Window
 {
     private readonly FolderConfig _config;
-    private readonly ObservableCollection<LogRow> _rows = new();
+    private readonly BoundedLogCollection _rows = new();
 
     private FolderTailer? _tailer;
     private bool _paused;
@@ -180,14 +179,18 @@ public partial class FolderWindow : Window
             _rows.Add(row);
         }
 
+        // Trim the oldest rows in bulk rather than one at a time. Removing rows
+        // individually raised a collection-changed event per row, and at the cap
+        // under a heavy log rate that flood of events stalled the UI thread and
+        // stopped the display from updating. Let the buffer grow a little past
+        // the cap, then drop the whole overflow in one batched notification so a
+        // trim (and any scroll reposition when auto-scroll is off) happens rarely
+        // instead of on every batch.
         int max = _config.MaxRows > 0 ? _config.MaxRows : 50_000;
-        if (_rows.Count > max)
+        int slack = Math.Clamp(max / 20, 1, 2048);
+        if (_rows.Count >= max + slack)
         {
-            int excess = _rows.Count - max;
-            for (int i = 0; i < excess; i++)
-            {
-                _rows.RemoveAt(0);
-            }
+            _rows.TrimHead(max);
         }
 
         if (AutoScrollCheck.IsChecked == true && _rows.Count > 0)

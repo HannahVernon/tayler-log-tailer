@@ -69,6 +69,11 @@ recursive and auto-scroll flags, and window bounds.
   line breaks cannot exhaust memory.
 - Non-fatal conditions (access denied, watcher unavailable, file limit reached)
   are surfaced in the window status bar rather than failing silently.
+- The combined view keeps a bounded number of rows (50,000 by default); once the
+  cap is reached the oldest rows are dropped so memory stays bounded and the
+  view keeps following the newest lines.  Trimming is done in bulk, so a fast log
+  rate at the cap does not stall the display; the row count can briefly run a
+  little past the cap between trims.
 - New content is detected by reading through to the end of each file rather than
   trusting the reported file length, so tailing keeps working on network shares
   where the cached length can lag behind appended data.  If the file watcher is
