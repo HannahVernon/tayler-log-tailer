@@ -18,6 +18,9 @@ public sealed class FileTailer
     /// <summary>Maximum bytes read into memory in a single read operation.</summary>
     private const int ReadChunkBytes = 1024 * 1024;
 
+    /// <summary>Reusable buffer size for streaming reads to end of file.</summary>
+    private const int StreamBufferBytes = 64 * 1024;
+
     /// <summary>
     /// Maximum bytes buffered for a single not-yet-terminated line. A line that
     /// exceeds this is flushed as-is to bound memory for newline-free input.
@@ -106,6 +109,12 @@ public sealed class FileTailer
                 FilePath, FileMode.Open, FileAccess.Read,
                 FileShare.ReadWrite | FileShare.Delete);
 
+            // Note: fs.Length is only used to detect truncation / rotation. It is
+            // deliberately NOT used to decide whether new data exists: over SMB /
+            // network shares the redirector can cache a stale (smaller) length, so
+            // we instead seek to the last offset and read through to the real end
+            // of file. A read at the offset goes to the server and returns the
+            // genuinely appended bytes even when the cached length lags.
             long length = fs.Length;
             if (length < _position)
             {
@@ -114,13 +123,8 @@ public sealed class FileTailer
                 _pending.Clear();
             }
 
-            if (length <= _position)
-            {
-                return output;
-            }
-
             fs.Seek(_position, SeekOrigin.Begin);
-            DrainStream(fs, length, output, skipFirstPartialLine: false);
+            DrainToEnd(fs, output);
         }
         catch (IOException ex)
         {
@@ -168,6 +172,28 @@ public sealed class FileTailer
             }
 
             ProcessBytes(buffer, offset, read, output);
+        }
+    }
+
+    /// <summary>
+    /// Reads from the current position until the actual end of the stream is
+    /// reached (a read returning zero bytes), decoding complete lines. Unlike
+    /// <see cref="DrainStream"/> this does not rely on a precomputed length, so a
+    /// stale cached file length (common on SMB shares) cannot hide appended data.
+    /// </summary>
+    private void DrainToEnd(Stream stream, List<string> output)
+    {
+        byte[] buffer = new byte[StreamBufferBytes];
+        while (true)
+        {
+            int read = stream.Read(buffer, 0, buffer.Length);
+            if (read == 0)
+            {
+                break;
+            }
+
+            _position += read;
+            ProcessBytes(buffer, 0, read, output);
         }
     }
 

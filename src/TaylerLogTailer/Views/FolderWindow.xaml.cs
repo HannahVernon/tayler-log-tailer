@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using System.Windows;
 using Microsoft.Win32;
 using TaylerLogTailer.Models;
@@ -13,11 +12,15 @@ namespace TaylerLogTailer.Views;
 public partial class FolderWindow : Window
 {
     private readonly FolderConfig _config;
-    private readonly ObservableCollection<LogRow> _rows = new();
+    private readonly BoundedLogCollection _rows = new();
 
     private FolderTailer? _tailer;
     private bool _paused;
     private bool _forgetting;
+    private int _fileCount;
+    private DateTime? _lastDataAt;
+    private string? _lastNotice;
+    private string _state = "Idle";
 
     public FolderWindow(FolderConfig config)
     {
@@ -116,7 +119,12 @@ public partial class FolderWindow : Window
 
         tailer.LinesArrived += OnLinesArrived;
         tailer.Notice += OnNotice;
+        tailer.DiscoveryCompleted += OnDiscoveryCompleted;
         _tailer = tailer;
+
+        _fileCount = 0;
+        _lastDataAt = null;
+        _lastNotice = null;
 
         UpdateStatus("Starting\u2026");
         System.Threading.Tasks.Task.Run(tailer.Start).ContinueWith(
@@ -130,6 +138,7 @@ public partial class FolderWindow : Window
         {
             _tailer.LinesArrived -= OnLinesArrived;
             _tailer.Notice -= OnNotice;
+            _tailer.DiscoveryCompleted -= OnDiscoveryCompleted;
             _tailer.Dispose();
             _tailer = null;
         }
@@ -137,7 +146,25 @@ public partial class FolderWindow : Window
 
     private void OnNotice(string message)
     {
-        Dispatcher.BeginInvoke(() => StatusText.Text = message);
+        Dispatcher.BeginInvoke(() =>
+        {
+            _lastNotice = message;
+            RefreshStatus();
+        });
+    }
+
+    private void OnDiscoveryCompleted(int fileCount)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            _fileCount = fileCount;
+            if (_state is "Starting\u2026" or "Idle")
+            {
+                _state = _paused ? "Paused" : "Following";
+            }
+
+            RefreshStatus();
+        });
     }
 
     private void OnLinesArrived(IReadOnlyList<LogRow> rows)
@@ -152,14 +179,18 @@ public partial class FolderWindow : Window
             _rows.Add(row);
         }
 
+        // Trim the oldest rows in bulk rather than one at a time. Removing rows
+        // individually raised a collection-changed event per row, and at the cap
+        // under a heavy log rate that flood of events stalled the UI thread and
+        // stopped the display from updating. Let the buffer grow a little past
+        // the cap, then drop the whole overflow in one batched notification so a
+        // trim (and any scroll reposition when auto-scroll is off) happens rarely
+        // instead of on every batch.
         int max = _config.MaxRows > 0 ? _config.MaxRows : 50_000;
-        if (_rows.Count > max)
+        int slack = Math.Clamp(max / 20, 1, 2048);
+        if (_rows.Count >= max + slack)
         {
-            int excess = _rows.Count - max;
-            for (int i = 0; i < excess; i++)
-            {
-                _rows.RemoveAt(0);
-            }
+            _rows.TrimHead(max);
         }
 
         if (AutoScrollCheck.IsChecked == true && _rows.Count > 0)
@@ -167,12 +198,46 @@ public partial class FolderWindow : Window
             LogGrid.ScrollIntoView(_rows[^1]);
         }
 
+        if (rows.Count > 0)
+        {
+            _lastDataAt = DateTime.Now;
+        }
+
         UpdateStatus(_paused ? "Paused" : "Following");
     }
 
     private void UpdateStatus(string state)
     {
-        StatusText.Text = $"{_config.FolderPath}    \u2022    {_rows.Count:N0} rows    \u2022    {state}";
+        _state = state;
+        RefreshStatus();
+    }
+
+    private void RefreshStatus()
+    {
+        if (string.IsNullOrWhiteSpace(_config.FolderPath))
+        {
+            StatusText.Text = _state;
+            return;
+        }
+
+        const string sep = "    \u2022    ";
+        var sb = new System.Text.StringBuilder();
+        sb.Append(_config.FolderPath);
+        sb.Append(sep).Append($"{_rows.Count:N0} rows");
+        sb.Append(sep).Append($"{_fileCount:N0} files");
+        sb.Append(sep).Append(_state);
+
+        if (_lastDataAt is DateTime t)
+        {
+            sb.Append(sep).Append("last new ").Append(t.ToString("HH:mm:ss"));
+        }
+
+        if (!string.IsNullOrEmpty(_lastNotice))
+        {
+            sb.Append(sep).Append(_lastNotice);
+        }
+
+        StatusText.Text = sb.ToString();
     }
 
     private void UpdateConfigFromControls()

@@ -13,6 +13,8 @@ Built with WPF on .NET 10 (Windows).
 - One window per folder.  Open as many windows as you like, each watching a
   different folder.
 - Combined view with two columns: the originating file name and the log line.
+  Selecting a row highlights it with a high-contrast colour so the text stays
+  readable while selected.
 - Automatic tailing via `FileSystemWatcher` plus a periodic poll fallback, so
   rapid writes and network shares are both handled.
 - New log files created in a watched folder start showing up automatically.
@@ -69,6 +71,25 @@ recursive and auto-scroll flags, and window bounds.
   line breaks cannot exhaust memory.
 - Non-fatal conditions (access denied, watcher unavailable, file limit reached)
   are surfaced in the window status bar rather than failing silently.
+- The combined view keeps a bounded number of rows (50,000 by default); once the
+  cap is reached the oldest rows are dropped so memory stays bounded and the
+  view keeps following the newest lines.  Trimming is done in bulk, so a fast log
+  rate at the cap does not stall the display; the row count can briefly run a
+  little past the cap between trims.
+- New content is detected by reading through to the end of each file rather than
+  trusting the reported file length, so tailing keeps working on network shares
+  where the cached length can lag behind appended data.  If the file watcher is
+  interrupted (for example an internal-buffer overflow on a busy folder), the
+  periodic poll continues regardless and a notice is shown.
+
+## Status bar
+
+The status bar shows the watched folder, the current row count, the number of
+matched files being followed, the follow state (Following / Paused / Starting),
+the time the most recent new line arrived ("last new HH:mm:ss"), and the most
+recent notice if any.  The "last new" time makes a stalled source easy to spot:
+if files are still being written but the time stops advancing, the source or
+share is not delivering new content.
 
 ## Build and run
 

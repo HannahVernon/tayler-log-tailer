@@ -35,6 +35,7 @@ public sealed class FolderTailer : IDisposable
     private int _rescanRequested;
     private long _lastRescanTick;
     private bool _capNotified;
+    private int _lastReportedCount = -1;
     private volatile bool _paused;
     private volatile bool _disposed;
 
@@ -58,6 +59,13 @@ public sealed class FolderTailer : IDisposable
     /// </summary>
     public event Action<string>? Notice;
 
+    /// <summary>
+    /// Raised (on a background thread) after discovery runs, with the current
+    /// number of matched files being followed. Lets the UI report that tailing is
+    /// active even before any new line arrives.
+    /// </summary>
+    public event Action<int>? DiscoveryCompleted;
+
     public bool Paused
     {
         get => _paused;
@@ -80,6 +88,7 @@ public sealed class FolderTailer : IDisposable
         _lastRescanTick = Environment.TickCount64;
         SetupWatcher();
         _timer = new Timer(_ => Poll(), null, PollIntervalMs, PollIntervalMs);
+        ReportDiscovery();
     }
 
     public void Dispose()
@@ -104,12 +113,14 @@ public sealed class FolderTailer : IDisposable
             {
                 IncludeSubdirectories = _recursive,
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size,
+                InternalBufferSize = 64 * 1024,
             };
 
             _watcher.Changed += (_, _) => Poll();
             _watcher.Created += (_, _) => RequestRescanAndPoll();
             _watcher.Renamed += (_, _) => RequestRescanAndPoll();
             _watcher.Deleted += (_, _) => RequestRescanAndPoll();
+            _watcher.Error += OnWatcherError;
             _watcher.EnableRaisingEvents = true;
         }
         catch (Exception ex)
@@ -125,6 +136,31 @@ public sealed class FolderTailer : IDisposable
     {
         Interlocked.Exchange(ref _rescanRequested, 1);
         Poll();
+    }
+
+    private void OnWatcherError(object sender, ErrorEventArgs e)
+    {
+        // The watcher's internal buffer can overflow when many changes arrive at
+        // once (common on busy or network folders), and some shares drop the
+        // watch entirely. Force a rescan and let the periodic poll carry on; the
+        // poll does not depend on watcher events.
+        RaiseNotice($"File watcher interrupted; relying on periodic polling ({e.GetException().Message}).");
+        RequestRescanAndPoll();
+    }
+
+    private void ReportDiscovery()
+    {
+        int count;
+        lock (_gate)
+        {
+            count = _tailers.Count;
+        }
+
+        if (count != _lastReportedCount)
+        {
+            _lastReportedCount = count;
+            DiscoveryCompleted?.Invoke(count);
+        }
     }
 
     private void Poll()
@@ -236,6 +272,8 @@ public sealed class FolderTailer : IDisposable
             _capNotified = true;
             RaiseNotice($"File limit ({MaxFiles}) reached; additional files are not being followed.");
         }
+
+        ReportDiscovery();
     }
 
     private void DrainExisting()
