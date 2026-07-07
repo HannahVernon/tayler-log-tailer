@@ -29,6 +29,7 @@ public sealed class FileTailer
 
     private readonly List<byte> _pending = new();
     private long _position;
+    private string? _lastLoggedError;
 
     public FileTailer(string path)
     {
@@ -85,11 +86,11 @@ public sealed class FileTailer
         }
         catch (IOException ex)
         {
-            LastError = ex.Message;
+            LogReadError(ex);
         }
         catch (UnauthorizedAccessException ex)
         {
-            LastError = ex.Message;
+            LogReadError(ex);
         }
 
         return output;
@@ -125,14 +126,15 @@ public sealed class FileTailer
 
             fs.Seek(_position, SeekOrigin.Begin);
             DrainToEnd(fs, output);
+            NoteReadSuccess();
         }
         catch (IOException ex)
         {
-            LastError = ex.Message;
+            LogReadError(ex);
         }
         catch (UnauthorizedAccessException ex)
         {
-            LastError = ex.Message;
+            LogReadError(ex);
         }
 
         return output;
@@ -230,5 +232,34 @@ public sealed class FileTailer
         }
 
         return count == 0 ? string.Empty : Utf8.GetString(_pending.ToArray(), 0, count);
+    }
+
+    /// <summary>
+    /// Records a read/access failure: sets <see cref="LastError"/> for the UI and
+    /// writes the full exception (type, message, HResult) to the diagnostic log.
+    /// The diagnostic entry is de-duplicated so a persistently failing file logs
+    /// once per distinct error rather than on every poll.
+    /// </summary>
+    private void LogReadError(Exception ex)
+    {
+        LastError = ex.Message;
+        if (ex.Message != _lastLoggedError)
+        {
+            _lastLoggedError = ex.Message;
+            DiagnosticLog.Error($"Read failed for '{FilePath}'.", ex);
+        }
+    }
+
+    /// <summary>
+    /// Notes a successful read; if the file had previously been failing, records
+    /// that reading has resumed.
+    /// </summary>
+    private void NoteReadSuccess()
+    {
+        if (_lastLoggedError is not null)
+        {
+            DiagnosticLog.Info($"Reading resumed for '{FilePath}'.");
+            _lastLoggedError = null;
+        }
     }
 }
