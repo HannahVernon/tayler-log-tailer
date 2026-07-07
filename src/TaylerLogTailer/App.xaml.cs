@@ -22,6 +22,7 @@ public partial class App : Application
         base.OnStartup(e);
 
         Settings = _settingsService.Load();
+        DiagnosticLog.WriteSessionHeader(Settings, _settingsService.FilePath);
 
         var configs = Settings.Windows
             .Where(c => !string.IsNullOrWhiteSpace(c.FolderPath))
@@ -48,6 +49,25 @@ public partial class App : Application
     {
         var window = new FolderWindow(config);
         window.Show();
+    }
+
+    /// <summary>
+    /// Opens a transient window that live-tails the diagnostic log folder. The
+    /// window is not remembered across runs.
+    /// </summary>
+    public void OpenLogWindow()
+    {
+        var config = new FolderConfig
+        {
+            FolderPath = DiagnosticLog.Directory,
+            GlobPattern = "*.log",
+            InitialLines = 2000,
+            Recursive = false,
+            AutoScroll = true,
+            Ephemeral = true,
+        };
+
+        OpenWindow(config);
     }
 
     public void SaveSettings()

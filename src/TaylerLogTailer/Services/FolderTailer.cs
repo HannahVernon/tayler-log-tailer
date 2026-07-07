@@ -74,6 +74,8 @@ public sealed class FolderTailer : IDisposable
 
     public void Start()
     {
+        DiagnosticLog.Info($"Tailing '{_folder}' (recursive={_recursive}, initialLines={_initialLines}).");
+
         // Guard the initial discovery against a watcher event racing in.
         Interlocked.Exchange(ref _polling, 1);
         try
@@ -128,6 +130,7 @@ public sealed class FolderTailer : IDisposable
             // If the watcher cannot be created (for example on some network
             // shares) the periodic poll still keeps the view up to date.
             _watcher = null;
+            DiagnosticLog.Error($"File watcher could not be created for '{_folder}'.", ex);
             RaiseNotice($"File watcher unavailable; using periodic polling only ({ex.Message}).");
         }
     }
@@ -144,7 +147,9 @@ public sealed class FolderTailer : IDisposable
         // once (common on busy or network folders), and some shares drop the
         // watch entirely. Force a rescan and let the periodic poll carry on; the
         // poll does not depend on watcher events.
-        RaiseNotice($"File watcher interrupted; relying on periodic polling ({e.GetException().Message}).");
+        Exception ex = e.GetException();
+        DiagnosticLog.Error($"File watcher interrupted for '{_folder}'.", ex);
+        RaiseNotice($"File watcher interrupted; relying on periodic polling ({ex.Message}).");
         RequestRescanAndPoll();
     }
 
@@ -190,6 +195,7 @@ public sealed class FolderTailer : IDisposable
         }
         catch (Exception ex)
         {
+            DiagnosticLog.Error($"Tailing error in '{_folder}'.", ex);
             RaiseNotice($"Tailing error: {ex.Message}");
         }
         finally
@@ -270,6 +276,7 @@ public sealed class FolderTailer : IDisposable
         if (capHit && !_capNotified)
         {
             _capNotified = true;
+            DiagnosticLog.Warn($"File limit ({MaxFiles}) reached in '{_folder}'; additional files are not being followed.");
             RaiseNotice($"File limit ({MaxFiles}) reached; additional files are not being followed.");
         }
 

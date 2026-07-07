@@ -1,5 +1,7 @@
 namespace TaylerLogTailer.Models;
 
+using System.Text.Json.Serialization;
+
 /// <summary>
 /// Persisted configuration for a single folder window. One instance per window
 /// is stored so the app can reopen the same folders on the next run.
@@ -40,4 +42,12 @@ public sealed class FolderConfig
     public double Height { get; set; } = 640;
 
     public bool Maximized { get; set; }
+
+    /// <summary>
+    /// When true, this window is a transient view (for example the diagnostic
+    /// log viewer) and is never persisted to settings, so it does not reopen on
+    /// the next run.
+    /// </summary>
+    [JsonIgnore]
+    public bool Ephemeral { get; set; }
 }

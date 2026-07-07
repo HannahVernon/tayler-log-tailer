@@ -54,6 +54,9 @@
                     <Button x:Name="ClearButton" Style="{StaticResource ToolButton}"
                             Content="Clear" Click="OnClear"
                             ToolTip="Clear the current view (does not change the files)" />
+                    <Button x:Name="LogButton" Style="{StaticResource ToolButton}"
+                            Content="Log" Click="OnViewLog"
+                            ToolTip="Open a window that tails the app's diagnostic error log" />
                     <Button x:Name="ForgetButton" Style="{StaticResource ToolButton}"
                             Content="Forget" Click="OnForget"
                             ToolTip="Close this window and stop reopening this folder on next run" />
@@ -74,7 +77,13 @@
                 BorderBrush="#FFD0D0D0"
                 BorderThickness="0,1,0,0"
                 Padding="6,2">
-            <TextBlock x:Name="StatusText" FontSize="11" Foreground="#FF505050" Text="No folder selected." />
+            <DockPanel LastChildFill="True">
+                <TextBlock x:Name="VersionText" DockPanel.Dock="Right"
+                           FontSize="11" Foreground="#FF707070"
+                           Margin="12,0,0,0" VerticalAlignment="Center" Text="v?" />
+                <TextBlock x:Name="StatusText" FontSize="11" Foreground="#FF505050"
+                           TextTrimming="CharacterEllipsis" Text="No folder selected." />
+            </DockPanel>
         </Border>
 
         <!-- Combined log view -->
