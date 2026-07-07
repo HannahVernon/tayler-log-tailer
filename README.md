@@ -30,6 +30,11 @@ Built with WPF on .NET 10 (Windows).
   resumes monitoring the same folders, including window size and position.
 - Pause / resume following, and clear the current view, without affecting the
   files on disk.
+- Writes a diagnostic error log with full exception detail (type, message and
+  HResult / Win32 code) for watcher and file-read failures, so intermittent
+  problems (especially on network shares) can be investigated after the fact.
+  The **Log** button opens a window that live-tails that log.
+- Shows the running app version in the status bar.
 
 ## Window controls
 
@@ -43,6 +48,7 @@ Auto-scroll | Keep the newest line in view.
 Apply | Apply pattern / option changes and restart tailing.
 Pause / Resume | Stop or resume following.
 Clear | Empty the current view (files are untouched).
+Log | Open a window that live-tails the app's diagnostic error log.
 New Window | Open another window for a different folder.
 Forget | Close this window and stop reopening this folder on next run.
 
@@ -59,6 +65,27 @@ Settings are stored as JSON at:
 
 Each remembered window records its folder, glob pattern, initial-lines count,
 recursive and auto-scroll flags, and window bounds.
+
+## Diagnostic log
+
+Non-fatal problems (watcher errors, file read / access failures) are written to
+a diagnostic log so intermittent issues can be reviewed later:
+
+```
+%APPDATA%\TaylerLogTailer\logs\diagnostic.log
+```
+
+Each session starts with a header recording the app version, operating system,
+.NET runtime, process bitness, the settings file path, and the set of watched
+windows, so a log read later is self-describing.  Subsequent entries are
+timestamped (ISO-8601) and include the full exception type, message and
+HResult / Win32 code.  A read failure for a given file is recorded once per
+distinct error (and again when reading resumes), so a persistently failing file
+does not flood the log.  The file is rolled to `diagnostic.log.1` once it grows
+past 1 MB.
+
+The **Log** button opens a transient window that live-tails this folder; that
+window is not remembered across runs.
 
 ## Limits and safety
 
@@ -89,7 +116,8 @@ matched files being followed, the follow state (Following / Paused / Starting),
 the time the most recent new line arrived ("last new HH:mm:ss"), and the most
 recent notice if any.  The "last new" time makes a stalled source easy to spot:
 if files are still being written but the time stops advancing, the source or
-share is not delivering new content.
+share is not delivering new content.  The running app version is shown at the
+right-hand end of the status bar.
 
 ## Build and run
 
@@ -175,6 +203,8 @@ src/TaylerLogTailer/
     BoundedLogCollection.cs          Row collection with bulk head-trim at the cap
     AppSettings.cs                   Root settings (set of windows)
   Services/
+    AppInfo.cs                       App version / product (from MinVer)
+    DiagnosticLog.cs                 Thread-safe diagnostic error log
     SettingsService.cs               Load/save settings JSON
     FileTailer.cs                    Byte-offset tailing of one file
     FolderTailer.cs                  FileSystemWatcher + polling over a folder

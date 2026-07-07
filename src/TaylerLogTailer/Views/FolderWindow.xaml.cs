@@ -29,6 +29,9 @@ public partial class FolderWindow : Window
 
         LogGrid.ItemsSource = _rows;
 
+        VersionText.Text = "v" + AppInfo.Version;
+        VersionText.ToolTip = $"{AppInfo.Product} {AppInfo.Version}\nDiagnostic log: {DiagnosticLog.FilePath}";
+
         PatternBox.Text = config.GlobPattern;
         LinesBox.Text = config.InitialLines.ToString();
         RecursiveCheck.IsChecked = config.Recursive;
@@ -265,8 +268,11 @@ public partial class FolderWindow : Window
         {
             _config.FolderPath = dialog.FolderName;
             UpdateConfigFromControls();
-            App.Current.Track(_config);
-            App.Current.SaveSettings();
+            if (!_config.Ephemeral)
+            {
+                App.Current.Track(_config);
+                App.Current.SaveSettings();
+            }
 
             _rows.Clear();
             StartTailing();
@@ -282,8 +288,11 @@ public partial class FolderWindow : Window
             return;
         }
 
-        App.Current.Track(_config);
-        App.Current.SaveSettings();
+        if (!_config.Ephemeral)
+        {
+            App.Current.Track(_config);
+            App.Current.SaveSettings();
+        }
 
         _rows.Clear();
         StartTailing();
@@ -307,6 +316,11 @@ public partial class FolderWindow : Window
         UpdateStatus(_paused ? "Paused" : "Following");
     }
 
+    private void OnViewLog(object sender, RoutedEventArgs e)
+    {
+        App.Current.OpenLogWindow();
+    }
+
     private void OnNewWindow(object sender, RoutedEventArgs e)
     {
         App.Current.OpenWindow(new FolderConfig());
@@ -323,7 +337,7 @@ public partial class FolderWindow : Window
     {
         StopTailing();
 
-        if (_forgetting)
+        if (_forgetting || _config.Ephemeral)
         {
             return;
         }
